@@ -1,20 +1,60 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-alembic
-httpx
-requests
-python-dotenv
-langchain
-openai
-pdfplumber
-PyMuPDF
-pdfminer.six
-Pillow
-markdown
-PyYAML
-typer
-pydantic
-pytest
-pytest-asyncio
+# ============================================
+# SelfAutoScholar 依赖清单
+# ============================================
+
+# --- Web 框架 & 服务器 ---
+fastapi>=0.115.0              # REST API 框架
+uvicorn[standard]>=0.34.0     # ASGI 服务器 (含 websocket 支持)
+
+# --- 数据库 ---
+sqlalchemy>=2.0.0             # ORM
+psycopg2-binary>=2.9.0        # PostgreSQL 驱动
+alembic>=1.14.0               # 数据库迁移工具
+
+# --- HTTP 客户端 ---
+httpx>=0.28.0                 # 异步 HTTP 客户端 (替代 requests)
+
+# --- 配置 & 环境 ---
+python-dotenv>=1.0.0          # .env 环境变量加载
+pydantic>=2.10.0              # 数据验证
+pydantic-settings>=2.7.0      # 配置管理 (支持 INI/ENV/YAML)
+
+# --- LLM 相关 ---
+langchain>=0.3.0              # LLM 编排框架
+langchain-openai>=0.3.0       # OpenAI 集成 (外部 API 调用)
+openai>=1.58.0                # OpenAI SDK (兼容 LM Studio)
+lmstudio>=1.5.0               # LM Studio 本地 LLM SDK
+
+# --- MCP 协议 ---
+mcp>=1.0.0                    # Model Context Protocol SDK
+
+# --- 数据源客户端 ---
+arxiv>=2.1.0                  # arXiv 论文检索
+PyGithub>=2.5.0               # GitHub 项目检索
+feedparser>=6.0.0             # RSS/Atom 新闻订阅源解析
+
+# --- 文档处理 ---
+PyMuPDF>=1.25.0               # PDF 解析基础库
+pymupdf4llm>=1.27.0           # PDF → Markdown (LLM 友好格式, 含图表提取)
+Pillow>=11.0.0                # 图像处理 (PDF 图表渲染)
+
+# --- 任务调度 ---
+apscheduler>=3.10.0           # 定时任务调度 (每日自动执行)
+
+# --- 日志 ---
+loguru>=0.7.0                 # 结构化日志
+
+# --- 异步支持 ---
+aiofiles>=24.1.0              # 异步文件读写
+
+# --- CLI ---
+typer>=0.15.0                 # 命令行接口
+
+# --- 工具 ---
+PyYAML>=6.0.0                 # YAML 解析
+
+# ============================================
+# 开发依赖 (可选: pip install -r requirements-dev.txt)
+# ============================================
+# pytest>=8.0.0
+# pytest-asyncio>=0.25.0
