@@ -19,7 +19,7 @@ build/
 *.env
 
 # Data
-data/downloads/
+data/
 exports/markdown/
 logs/
 
