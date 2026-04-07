@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="gpt-4o-mini")
 
     # === 本地 LLM 配置 ===
-    local_llm_api_base: str = Field(default="http://127.0.0.1:1234/v1")
+    local_llm_api_base: str = Field(default="http://127.0.0.1:5001/v1")
     local_llm_api_key: str = Field(default="lm-studio")
     local_llm_model: str = Field(default="default")
 
@@ -107,7 +107,7 @@ def load_settings_from_ini() -> Settings:
         kwargs["llm_api_base"] = sec.get("external_api_base", "https://api.openai.com/v1")
         kwargs["llm_api_key"] = sec.get("external_api_key", "sk-xxx")
         kwargs["llm_model"] = sec.get("external_model", "gpt-4o-mini")
-        kwargs["local_llm_api_base"] = sec.get("local_api_base", "http://127.0.0.1:1234/v1")
+        kwargs["local_llm_api_base"] = sec.get("local_api_base", "http://127.0.0.1:5001/v1")
         kwargs["local_llm_api_key"] = sec.get("local_api_key", "lm-studio")
         kwargs["local_llm_model"] = sec.get("local_model", "default")
 

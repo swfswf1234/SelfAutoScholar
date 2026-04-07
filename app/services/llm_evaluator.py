@@ -39,7 +39,7 @@ def evaluate_paper(client: OpenAI, model: str, title: str, abstract: str) -> dic
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
+            temperature=0.8,
             max_tokens=100,
         )
 

@@ -325,7 +325,6 @@ def evaluate_with_lmstudio(papers: list[dict]) -> list[dict]:
                 try:
                     result = json.loads(combined)
                 except Exception:
-                    result = None
                     start_idx = combined.rfind('{"is_important":')
                     if start_idx == -1:
                         start_idx = combined.find('"is_important":')
@@ -370,12 +369,13 @@ def evaluate_with_lmstudio(papers: list[dict]) -> list[dict]:
 # ============================================================
 # 步骤 7: 下载 PDF（按日期子目录 + 标题重命名）
 # ============================================================
-def download_papers_with_title_rename(papers: list[dict]) -> list[dict]:
+def download_papers_with_title_rename(papers: list[dict]):
     """
     下载论文 PDF 到日期子目录，并用论文标题重命名文件。
-    文件命名格式: {arXiv_ID}_{安全标题}.pdf
+    文件命名格式: {arXiv_ID}_{论文标题}.pdf
+    保存路径: {下载路径}/{日期}/papers/{arxiv_id}_{论文标题}.pdf
     """
-    print("\n[步骤 3/7] 下载论文 PDF（按日期子目录 + 标题重命名）")
+    print("\n[步骤 3/7] 下载论文 PDF")
     print("-" * 70)
 
     today_str = date.today().strftime("%Y-%m-%d")
@@ -400,7 +400,7 @@ def download_papers_with_title_rename(papers: list[dict]) -> list[dict]:
             paper["is_downloaded"] = False
             continue
 
-        title_filename = _safe_filename(title, max_len=60)
+        title_filename = _safe_filename(title, max_len=100)
         final_filename = "{}_{}.pdf".format(safe_id, title_filename)
         final_path = save_dir / final_filename
 
@@ -499,17 +499,21 @@ def analyze_papers(papers: list[dict]) -> list[dict]:
 
 
 # ============================================================
-# 步骤 9: 导出 JSON 报告
+# 步骤 9: 导出 JSON 报告（所有搜索论文，含未下载的）
 # ============================================================
-def export_json(papers: list[dict], output_path: Path):
+def export_json(all_papers: list[dict]):
     """
-    将论文分析结果导出为 JSON 格式。
+    将所有搜索论文的详细记录导出为 JSON 格式（含评估/引用/是否下载等完整信息）。
+    保存路径: {下载路径}/{日期}/papers/daily_paper_search_detail.json
     """
-    print("\n[步骤 5/7] 导出 JSON 报告: {}".format(output_path))
+    today_str = date.today().strftime("%Y-%m-%d")
+    output_path = DOWNLOADS_DIR / today_str / "papers" / "daily_paper_search_detail.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    print("\n[步骤 5/7] 导出论文搜索记录 (JSON): {}".format(output_path))
+
     export_data = []
-    for p in papers:
+    for p in all_papers:
         export_data.append({
             "arxiv_id": p["arxiv_id"],
             "title": p["title"],
@@ -529,37 +533,40 @@ def export_json(papers: list[dict], output_path: Path):
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(export_data, f, ensure_ascii=False, indent=2)
 
-    print("  已保存 {} 条记录".format(len(export_data)))
+    print("  已保存 {} 条记录（含未下载论文）".format(len(export_data)))
+    return output_path
 
 
 # ============================================================
-# 步骤 10: 导出 Markdown 论文列表
+# 步骤 10: 导出 Markdown 论文列表（仅下载的论文）
 # ============================================================
-def export_markdown(papers: list[dict], output_path: Path):
+def export_markdown(downloaded_papers: list[dict]):
     """
-    将论文列表导出为 Markdown 格式，便于在 Obsidian 等笔记工具中阅读。
+    将已下载论文的分析报告导出为 Markdown 格式。
+    保存路径: {下载路径}/{日期}/papers/daily_paper_analysis.md
     """
-    print("\n[步骤 6/7] 导出 Markdown 论文列表: {}".format(output_path))
+    today_str = date.today().strftime("%Y-%m-%d")
+    output_path = DOWNLOADS_DIR / today_str / "papers" / "daily_paper_analysis.md"
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    print("\n[步骤 6/7] 导出论文分析报告 (Markdown): {}".format(output_path))
 
     lines = [
         "# arXiv 论文分析报告\n",
-        "> 生成时间: {}  |  论文数量: {}  |  下载成功: {}\n".format(
-            date.today().strftime("%Y-%m-%d"),
-            len(papers),
-            sum(1 for p in papers if p.get("is_downloaded")),
+        "> 生成时间: {}  |  下载成功: {} 篇\n".format(
+            today_str,
+            len(downloaded_papers),
         ),
         "---\n",
     ]
 
-    for i, p in enumerate(papers, 1):
-        dl_tag = "✅" if p.get("is_downloaded") else "❌"
+    for i, p in enumerate(downloaded_papers, 1):
         eval_ = p.get("evaluation", {})
-        imp = "✅" if eval_.get("is_important") else "❌"
-        rel = "✅" if eval_.get("is_relevant") else "❌"
-        int_ = "✅" if eval_.get("is_interested") else "❌"
+        imp = "Y" if eval_.get("is_important") else "N"
+        rel = "Y" if eval_.get("is_relevant") else "N"
+        int_ = "Y" if eval_.get("is_interested") else "N"
 
-        lines.append("## {}. {} {}\n\n".format(i, p["title"], dl_tag))
+        lines.append("## {}. {}\n\n".format(i, p["title"]))
         lines.append("- **作者**: {}\n".format(", ".join(p["authors"][:3])))
         if len(p["authors"]) > 3:
             lines[-1] = lines[-1].rstrip("\n") + " 等\n"
@@ -568,7 +575,7 @@ def export_markdown(papers: list[dict], output_path: Path):
         ))
         lines.append("- **发布日期**: {}\n".format(p["published_date"]))
         lines.append("- **分类**: {}\n".format(", ".join(p["categories"][:5])))
-        lines.append("- **评估**: 重要{} 相关{} 有趣{}\n".format(imp, rel, int_))
+        lines.append("- **评估**: 重要[{}] 相关[{}] 有趣[{}]\n".format(imp, rel, int_))
 
         keywords = p.get("top_keywords", [])
         if keywords:
@@ -577,8 +584,6 @@ def export_markdown(papers: list[dict], output_path: Path):
 
         if p.get("local_path"):
             lines.append("- **PDF**: [本地文件]({})\n".format(p["local_path"]))
-        elif p.get("pdf_url"):
-            lines.append("- **PDF**: [下载链接]({})\n".format(p["pdf_url"]))
 
         abstract = p["abstract"].replace("\n", " ").strip()
         if len(abstract) > 400:
@@ -596,23 +601,25 @@ def export_markdown(papers: list[dict], output_path: Path):
     with open(output_path, "w", encoding="utf-8") as f:
         f.writelines(lines)
 
-    print("  已保存 {} 篇论文".format(len(papers)))
+    print("  已保存 {} 篇已下载论文".format(len(downloaded_papers)))
+    return output_path
 
 
 # ============================================================
 # 步骤 11: 打印总结报告
 # ============================================================
-def print_summary(papers: list[dict]):
+def print_summary(all_papers: list[dict], downloaded_papers: list[dict]):
     """在控制台打印最终的总结报告"""
     print("\n" + "=" * 70)
     print("步骤 7/7: 执行总结")
     print("=" * 70)
 
-    total = len(papers)
-    downloaded = sum(1 for p in papers if p.get("is_downloaded"))
-    important = sum(1 for p in papers if p.get("evaluation", {}).get("is_important"))
-    relevant = sum(1 for p in papers if p.get("evaluation", {}).get("is_relevant"))
-    interested = sum(1 for p in papers if p.get("evaluation", {}).get("is_interested"))
+    total = len(all_papers)
+    downloaded = len(downloaded_papers)
+    important = sum(1 for p in all_papers if p.get("evaluation", {}).get("is_important"))
+    relevant = sum(1 for p in all_papers if p.get("evaluation", {}).get("is_relevant"))
+    interested = sum(1 for p in all_papers if p.get("evaluation", {}).get("is_interested"))
+    today_str = date.today().strftime("%Y-%m-%d")
 
     print("\n论文统计:")
     print("  总计: {} 篇".format(total))
@@ -621,18 +628,18 @@ def print_summary(papers: list[dict]):
     print("  有趣: {} 篇".format(interested))
     print("  下载成功: {} 篇".format(downloaded))
 
-    print("\n论文列表:")
-    for i, p in enumerate(papers, 1):
-        dl = "✅" if p.get("is_downloaded") else "❌"
-        eval_ = p.get("evaluation", {})
-        status = "重要" if eval_.get("is_important") else ("相关" if eval_.get("is_relevant") else ("有趣" if eval_.get("is_interested") else "其他"))
-        print("  {}. [{}] {} {}".format(i, dl, status, p["title"][:55]))
+    print("\n已下载论文列表:")
+    if downloaded_papers:
+        for i, p in enumerate(downloaded_papers, 1):
+            print("  {}. [{}] {}".format(i, p["arxiv_id"], p["title"][:60]))
+    else:
+        print("  (无)")
 
+    papers_dir = DOWNLOADS_DIR / today_str / "papers"
     print("\n输出文件:")
-    print("  - JSON 报告: data/papers.json")
-    print("  - Markdown:   data/papers.md")
-    if downloaded > 0:
-        print("  - PDF 文件:   data/downloads/{}/papers/".format(date.today().strftime("%Y-%m-%d")))
+    print("  - 搜索记录:   {}".format(papers_dir / "daily_paper_search_detail.json"))
+    print("  - 分析报告:   {}".format(papers_dir / "daily_paper_analysis.md"))
+    print("  - PDF 目录:   {}".format(papers_dir))
 
 
 # ============================================================
@@ -749,11 +756,11 @@ def main():
     papers = download_papers_with_title_rename(papers)
     papers = analyze_papers(papers)
 
-    json_path = DATA_DIR / "papers.json"
-    md_path = DATA_DIR / "papers.md"
-    export_json(papers, json_path)
-    export_markdown(papers, md_path)
-    print_summary(papers)
+    today_str = date.today().strftime("%Y-%m-%d")
+    json_path = export_json(papers)
+    downloaded = [p for p in papers if p.get("is_downloaded")]
+    md_path = export_markdown(downloaded) if downloaded else None
+    print_summary(papers, downloaded)
 
     print("\n" + "=" * 70)
     print("Pipeline 执行完成！")
