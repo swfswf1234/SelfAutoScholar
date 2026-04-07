@@ -60,7 +60,7 @@ from openai import OpenAI
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.services.arxiv_client import search_papers
-from app.services.llm_evaluator import evaluate_papers, should_download
+from app.services.llm_service import should_download
 from app.services.pdf_downloader import download_pdf
 
 # ============================================================

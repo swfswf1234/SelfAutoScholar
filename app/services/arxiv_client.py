@@ -5,7 +5,7 @@ import arxiv
 from loguru import logger
 
 
-def search_papers(query: str, max_results: int = 20, delay: float = 3.0) -> list[dict]:
+def search_papers(query: str, max_results: int = 20, delay: float = 5.0, max_retries: int = 5) -> list[dict]:
     """
     从 arXiv 搜索论文
 
@@ -13,48 +13,53 @@ def search_papers(query: str, max_results: int = 20, delay: float = 3.0) -> list
         query: 搜索关键词
         max_results: 最大返回数量
         delay: 请求间隔 (秒), 避免触发 429 限制
+        max_retries: 最大重试次数
 
     Returns:
         论文元数据列表
     """
     logger.info(f"搜索 arXiv: query='{query}', max_results={max_results}")
 
-    client = arxiv.Client(
-        page_size=max_results,
-        delay_seconds=delay,
-        num_retries=3,
-    )
-    search = arxiv.Search(
-        query=query,
-        max_results=max_results,
-        sort_by=arxiv.SortCriterion.SubmittedDate,
-        sort_order=arxiv.SortOrder.Descending,
-    )
-
-    results = []
-    try:
-        for paper in client.results(search):
-            arxiv_id = paper.entry_id.split("/abs/")[-1]
-            results.append(
-                {
-                    "arxiv_id": arxiv_id,
-                    "title": paper.title,
-                    "abstract": paper.summary,
-                    "authors": [a.name for a in paper.authors],
-                    "categories": paper.categories,
-                    "pdf_url": paper.pdf_url,
-                    "source_url": paper.entry_id,
-                    "published_date": paper.published.date(),
-                }
+    for attempt in range(max_retries):
+        try:
+            client = arxiv.Client(
+                page_size=max_results,
+                delay_seconds=delay,
+                num_retries=3,
             )
-        logger.info(f"搜索完成: {len(results)} 篇")
-    except Exception as e:
-        logger.error(f"arXiv 搜索失败: {e}")
-        # 如果已有部分结果, 返回已获取的
-        if results:
-            logger.warning(f"返回已获取的 {len(results)} 篇")
+            search = arxiv.Search(
+                query=query,
+                max_results=max_results,
+                sort_by=arxiv.SortCriterion.SubmittedDate,
+                sort_order=arxiv.SortOrder.Descending,
+            )
 
-    return results
+            results = []
+            for paper in client.results(search):
+                arxiv_id = paper.entry_id.split("/abs/")[-1]
+                results.append(
+                    {
+                        "arxiv_id": arxiv_id,
+                        "title": paper.title,
+                        "abstract": paper.summary,
+                        "authors": [a.name for a in paper.authors],
+                        "categories": paper.categories,
+                        "pdf_url": paper.pdf_url,
+                        "source_url": paper.entry_id,
+                        "published_date": paper.published.date(),
+                    }
+                )
+            logger.info(f"搜索完成: {len(results)} 篇")
+            return results
+
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 10
+                logger.warning(f"arXiv 请求过于频繁，{wait_time}秒后重试 ({attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"arXiv 搜索失败: {e}")
+                return []
 
 
 def search_by_keywords(keywords: list[str], max_per_keyword: int = 20) -> list[dict]:

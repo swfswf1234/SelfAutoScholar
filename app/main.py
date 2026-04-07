@@ -1,4 +1,14 @@
-"""SelfAutoScholar 主入口 - Demo 完整链路"""
+"""SelfAutoScholar 主入口 - 完整链路
+
+功能:
+    1. 按关键词搜索 arXiv 论文
+    2. 调用 LLM 评估论文重要性/相关性/兴趣度
+    3. 根据评估结果下载 PDF
+    4. 输出搜索记录 JSON + 已下载论文 Markdown 分析报告
+
+使用方式:
+    python -m app.main --no-db --keywords "large language model"
+"""
 
 import sys
 import io
@@ -22,18 +32,13 @@ from pathlib import Path
 import loguru
 loguru.logger.disable("loguru")
 
-from openai import OpenAI
-
 from app.core.config import settings
 from app.core.database import SessionLocal, init_db
 from app.models.paper import Paper
 from app.services.arxiv_client import search_by_keywords
-from app.services.llm_evaluator import evaluate_papers, should_download
+from app.services.llm_service import LLMService, should_download
 from app.services.pdf_downloader import download_papers
-
-LM_STUDIO_BASE_URL = os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:5001/v1")
-LM_STUDIO_API_KEY = "not-needed"
-LM_STUDIO_MODEL = os.environ.get("LM_STUDIO_MODEL", "qwen/qwen3.5-9b")
+from app.services.llm_service import LLMService
 
 
 def is_title_duplicate(db, title: str) -> bool:
@@ -71,119 +76,58 @@ def save_to_db(db, paper: dict) -> Paper:
     return db_paper
 
 
-def print_report(all_papers: list[dict], downloaded_papers: list[dict]):
-    """打印报告"""
-    today = date.today().strftime("%Y-%m-%d")
+def _export_json(all_papers: list[dict], output_path: Path):
+    """导出所有搜索论文的详细记录为 JSON"""
+    def _to_serializable(obj):
+        if isinstance(obj, date):
+            return obj.isoformat()
+        return obj
 
-    print("\n" + "=" * 60)
-    print("  SelfAutoScholar 每日报告 ({})".format(today))
-    print("=" * 60)
+    export_data = []
+    for p in all_papers:
+        export_data.append({k: _to_serializable(v) for k, v in p.items()})
 
-    print("\n[统计]")
-    print("  搜索论文总数: {} 篇".format(len(all_papers)))
-    print("  评估通过: {} 篇".format(len(downloaded_papers)))
-
-    if downloaded_papers:
-        print("\n[已下载论文]")
-        for i, p in enumerate(downloaded_papers, 1):
-            ev = p["evaluation"]
-            status = "重要{} 相关{} 感兴趣{}".format(
-                "Y" if ev['is_important'] else "N",
-                "Y" if ev['is_relevant'] else "N",
-                "Y" if ev['is_interested'] else "N"
-            )
-            print("  {}. [{}] {}...".format(i, p['arxiv_id'], p['title'][:60]))
-            print("     评估: {}".format(status))
-            if p.get("local_path"):
-                print("     路径: {}".format(p['local_path']))
-    else:
-        print("\n  (无符合条件的论文)")
-
-    print("\n" + "=" * 60)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(export_data, f, ensure_ascii=False, indent=2)
 
 
-def _eval_single_paper(client: OpenAI, model: str, paper: dict) -> dict:
-    """直接调用 LM Studio 评估单篇论文（处理 reasoning_content）"""
-    title = paper["title"]
-    abstract = paper["abstract"]
-    try:
-        prompt = """你是一个学术论文评估助手。请评估以下论文，返回严格 JSON 格式结果（不要添加其他文字）。
+def _export_markdown(downloaded_papers: list[dict], output_path: Path):
+    """导出已下载论文的分析报告为 Markdown"""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    today_str = date.today().strftime("%Y-%m-%d")
 
-标题: {title}
+    lines = [
+        "# arXiv 论文分析报告\n",
+        "> 生成时间: {}  |  下载成功: {} 篇\n---\n".format(
+            today_str, len(downloaded_papers)
+        ),
+    ]
 
-摘要: {abstract}
-
-评估标准:
-1. is_important (重要性): 该论文是否在 AI/ML/NLP/CV 领域有重要贡献？是否有新颖的方法或发现？
-2. is_relevant (相关性): 是否与以下领域相关: 大语言模型 (LLM)、自然语言处理 (NLP)、机器学习、深度学习、计算机视觉？
-3. is_interested (兴趣度): 基于摘要内容，该论文是否值得深入阅读？是否有实用价值或理论突破？
-
-返回格式（严格 JSON，不要其他内容）:
-{{"is_important": true/false, "is_relevant": true/false, "is_interested": true/false}}""".format(
-            title=title, abstract=abstract[:2000]
-        )
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "你是一个严谨的助手。请直接回答用户问题，不要输出任何思考过程、推理步骤或Thinking Process。只输出最终答案。"},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-            max_tokens=4000,
-        )
-        raw_content = response.choices[0].message.content or ""
-        reasoning = getattr(response.choices[0].message, "reasoning_content", "") or ""
-        combined = raw_content.strip() or reasoning.strip()
-
-        result = None
-        if combined:
-            try:
-                result = json.loads(combined)
-            except Exception:
-                start_idx = combined.rfind('{"is_important":')
-                if start_idx == -1:
-                    start_idx = combined.find('"is_important":')
-                if start_idx != -1:
-                    brace_start = combined.rfind('{', 0, start_idx + 1)
-                    if brace_start != -1:
-                        for end_idx in range(len(combined) - 1, brace_start, -1):
-                            try:
-                                candidate = combined[brace_start:end_idx + 1]
-                                parsed = json.loads(candidate)
-                                if all(k in parsed for k in ("is_important", "is_relevant", "is_interested")):
-                                    result = parsed
-                                    break
-                            except Exception:
-                                continue
-
-        if result:
-            paper["evaluation"] = {
-                "is_important": bool(result.get("is_important", False)),
-                "is_relevant": bool(result.get("is_relevant", False)),
-                "is_interested": bool(result.get("is_interested", False)),
-            }
-        else:
-            paper["evaluation"] = {"is_important": False, "is_relevant": False, "is_interested": False}
-
-    except Exception as e:
-        paper["evaluation"] = {"is_important": False, "is_relevant": False, "is_interested": False}
-    return paper
-
-
-def _eval_with_lmstudio(papers: list[dict]) -> list[dict]:
-    """使用 LM Studio 批量评估论文"""
-    client = OpenAI(base_url=LM_STUDIO_BASE_URL, api_key=LM_STUDIO_API_KEY, timeout=120.0)
-    print("\n[3/7] LLM 评估 (LM Studio: {})".format(LM_STUDIO_BASE_URL))
-    for i, paper in enumerate(papers):
-        print("  评估 [{}/{}]: {}...".format(i + 1, len(papers), paper["title"][:50]))
-        paper = _eval_single_paper(client, LM_STUDIO_MODEL, paper)
-        ev = paper["evaluation"]
-        dl = should_download(ev)
-        print("    -> 重要={}, 相关={}, 有趣={} | 下载={}".format(
-            ev["is_important"], ev["is_relevant"], ev["is_interested"],
-            "是" if dl else "否"
+    for i, p in enumerate(downloaded_papers, 1):
+        ev = p.get("evaluation", {})
+        lines.append("## {}. {}\n\n".format(i, p["title"]))
+        lines.append("- **作者**: {}\n".format(", ".join(p["authors"][:3])))
+        if len(p["authors"]) > 3:
+            lines[-1] = lines[-1].rstrip("\n") + " 等\n"
+        lines.append("- **arXiv ID**: [{id}]({url})\n".format(
+            id=p["arxiv_id"], url=p.get("source_url", "#")
         ))
-    return papers
+        lines.append("- **发布日期**: {}\n".format(p.get("published_date", "")))
+        lines.append("- **评估**: 重要[{}] 相关[{}] 有趣[{}]\n".format(
+            "Y" if ev.get("is_important") else "N",
+            "Y" if ev.get("is_relevant") else "N",
+            "Y" if ev.get("is_interested") else "N",
+        ))
+        if p.get("local_path"):
+            lines.append("- **PDF**: [本地文件]({})\n".format(p["local_path"]))
+        abstract = p.get("abstract", "").replace("\n", " ").strip()
+        if len(abstract) > 400:
+            abstract = abstract[:400] + "..."
+        lines.append("\n**摘要**: {}\n\n---\n\n".format(abstract))
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
 
 
 def main():
@@ -196,13 +140,16 @@ def main():
     args = parser.parse_args()
 
     keywords = [k.strip() for k in args.keywords.split(",") if k.strip()] if args.keywords else settings.search_keywords
+    today_str = date.today().strftime("%Y-%m-%d")
+    papers_dir = settings.get_downloads_path() / today_str / "papers"
 
     print("=" * 60)
-    print("  SelfAutoScholar Demo 启动")
+    print("  SelfAutoScholar 启动")
     print("=" * 60)
-    print("  LLM: {} ({})".format(LM_STUDIO_BASE_URL, LM_STUDIO_MODEL))
+    print("  评估 Provider: {} ({})".format(settings.evaluation_provider, settings.local_llm_model))
     print("  搜索关键词: {}".format(keywords))
     print("  数据库模式: {}".format("跳过" if args.no_db else "启用"))
+    print("  输出目录:   {}".format(papers_dir))
     print("=" * 60)
 
     db = None
@@ -233,27 +180,27 @@ def main():
 
         if not unique_papers:
             print("  无新论文，退出")
-            print_report(all_papers, [])
             return
 
         # ===== 3. LLM 评估 =====
-        evaluated_papers = _eval_with_lmstudio(unique_papers)
+        llm_service = LLMService()
+        print("\n[3/7] LLM 评估")
+        unique_papers = llm_service.evaluate_papers(unique_papers)
 
         # ===== 4. 下载决策 =====
         print("\n[4/7] 下载决策...")
-        to_download = [p for p in evaluated_papers if should_download(p["evaluation"])]
+        to_download = [p for p in unique_papers if should_download(p["evaluation"])]
         to_download = to_download[:settings.max_downloads]
         print("  决定下载: {} 篇".format(len(to_download)))
 
         if not to_download:
             print("  无符合条件的论文，退出")
-            print_report(all_papers, [])
+            _export_json(all_papers, papers_dir / "daily_paper_search_detail.json")
             return
 
         # ===== 5. PDF 下载 =====
         print("\n[5/7] 下载 PDF...")
-        downloads_path = settings.get_downloads_path()
-        downloaded_papers = download_papers(to_download, downloads_path)
+        downloaded_papers = download_papers(to_download, settings.get_downloads_path())
 
         # ===== 6. 入库保存 =====
         if db:
@@ -268,25 +215,22 @@ def main():
 
         # ===== 7. 输出报告 =====
         print("\n[7/7] 生成报告...")
-        print_report(all_papers, downloaded_papers)
 
-        # 导出 JSON 报告（处理 date 对象序列化）
-        json_path = Path("data") / "app_papers.json"
-        json_path.parent.mkdir(exist_ok=True)
+        # 7a. 所有搜索论文 JSON（含未下载）
+        json_path = papers_dir / "daily_paper_search_detail.json"
+        _export_json(all_papers, json_path)
+        print("  搜索记录 (JSON): {}".format(json_path))
 
-        def _to_serializable(obj):
-            if isinstance(obj, date):
-                return obj.isoformat()
-            return obj
+        # 7b. 已下载论文 Markdown 分析报告
+        downloaded = [p for p in downloaded_papers if p.get("is_downloaded")]
+        if downloaded:
+            md_path = papers_dir / "daily_paper_analysis.md"
+            _export_markdown(downloaded, md_path)
+            print("  分析报告 (Markdown): {}".format(md_path))
+        else:
+            print("  分析报告: 无已下载论文，跳过 Markdown")
 
-        json_data = []
-        for p in downloaded_papers:
-            json_data.append({k: _to_serializable(v) for k, v in p.items()})
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(json_data, f, ensure_ascii=False, indent=2)
-        print("  JSON 报告已保存: {}".format(json_path))
-
-        print("\n  Demo 执行完成!")
+        print("\n  执行完成!")
 
     except Exception as e:
         print("\n  [错误] 执行出错: {}".format(str(e)))

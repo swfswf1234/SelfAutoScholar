@@ -29,5 +29,17 @@ def get_db():
 
 
 def init_db():
-    """初始化数据库 (创建所有表)"""
-    Base.metadata.create_all(bind=engine)
+    """初始化数据库，仅在表不存在时创建（幂等操作）"""
+    from sqlalchemy import inspect
+    
+    # 导入所有模型，确保 Base.metadata 包含所有表
+    from app.models import User, Paper, Project, News, Material, UserLabel
+    
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    tables_to_create = [
+        t for t in Base.metadata.tables.values()
+        if t.name not in existing_tables
+    ]
+    if tables_to_create:
+        Base.metadata.create_all(bind=engine, tables=tables_to_create)

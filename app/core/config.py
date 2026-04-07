@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     db_user: str = Field(default="postgres")
     db_password: str = Field(default="123456")
 
+    # === 默认用户配置 ===
+    default_user: str = Field(default="postgres")
+
     # === LLM 配置 (OpenAI 兼容) ===
     llm_api_base: str = Field(default="https://api.openai.com/v1")
     llm_api_key: str = Field(default="sk-xxx")
@@ -41,7 +44,13 @@ class Settings(BaseSettings):
     # === 本地 LLM 配置 ===
     local_llm_api_base: str = Field(default="http://127.0.0.1:5001/v1")
     local_llm_api_key: str = Field(default="lm-studio")
-    local_llm_model: str = Field(default="default")
+    local_llm_model: str = Field(default="qwen/qwen3.5-9b")
+
+    # === LLM Provider 选择 ===
+    # evaluation_provider: 论文评估任务使用哪个 provider (local / external)
+    evaluation_provider: str = Field(default="local")
+    # reasoning_provider: 推理/分析任务使用哪个 provider (local / external)
+    reasoning_provider: str = Field(default="external")
 
     # === Discovery 配置 ===
     search_keywords: list[str] = Field(
@@ -109,7 +118,9 @@ def load_settings_from_ini() -> Settings:
         kwargs["llm_model"] = sec.get("external_model", "gpt-4o-mini")
         kwargs["local_llm_api_base"] = sec.get("local_api_base", "http://127.0.0.1:5001/v1")
         kwargs["local_llm_api_key"] = sec.get("local_api_key", "lm-studio")
-        kwargs["local_llm_model"] = sec.get("local_model", "default")
+        kwargs["local_llm_model"] = sec.get("local_model", "qwen/qwen3.5-9b")
+        kwargs["evaluation_provider"] = sec.get("evaluation_provider", "local")
+        kwargs["reasoning_provider"] = sec.get("reasoning_provider", "external")
 
     if config.has_section("Discovery"):
         sec = config["Discovery"]
@@ -131,6 +142,10 @@ def load_settings_from_ini() -> Settings:
     if config.has_section("Logging"):
         sec = config["Logging"]
         kwargs["log_level"] = sec.get("level", "INFO")
+
+    if config.has_section("User"):
+        sec = config["User"]
+        kwargs["default_user"] = sec.get("default_user", "postgres")
 
     return Settings(**kwargs)
 

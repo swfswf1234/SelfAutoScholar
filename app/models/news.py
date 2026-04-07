@@ -1,4 +1,4 @@
-"""Paper ORM 模型"""
+"""News ORM 模型 - 新闻表"""
 
 import uuid
 from datetime import date, datetime
@@ -9,27 +9,21 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.core.database import Base
 
 
-class Paper(Base):
-    """论文表"""
+class News(Base):
+    """新闻表"""
 
-    __tablename__ = "papers"
+    __tablename__ = "news"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    arxiv_id = Column(String(50), unique=True, comment="arXiv ID")
-    title = Column(Text, nullable=False, comment="论文标题")
+    title = Column(Text, nullable=False, comment="新闻标题")
     title_cn = Column(Text, comment="中文标题")
-    abstract = Column(Text, comment="摘要")
-    abstract_cn = Column(Text, comment="中文摘要")
-    authors = Column(JSONB, default=list, comment="作者列表")
-    keywords = Column(JSONB, default=list, comment="关键词")
-    categories = Column(JSONB, default=list, comment="arXiv 分类")
-    source_url = Column(Text, comment="论文来源地址")
-    pdf_url = Column(Text, comment="PDF 下载地址")
-    local_path = Column(Text, comment="本地保存路径")
+    summary = Column(Text, comment="AI 摘要")
 
-    # AI 分析结果
-    summary = Column(Text, comment="AI 生成的总结")
-    key_points = Column(JSONB, default=list, comment="核心要点列表")
+    # 来源信息
+    source_name = Column(String(100), comment="来源网站名称")
+    source_url = Column(Text, comment="原始链接")
+    author = Column(String(200), comment="作者")
+    local_path = Column(Text, comment="本地保存路径")
 
     # 评估结果
     is_important = Column(Boolean, comment="重要性: true=重要, false=不重要")
@@ -42,10 +36,10 @@ class Paper(Base):
     user_tags = Column(JSONB, default=list, comment="用户自定义标签")
 
     # 时间信息
-    published_date = Column(Date, comment="论文发布日期")
+    published_at = Column(DateTime, comment="发布时间")
     processed_date = Column(Date, default=date.today, comment="处理日期")
     created_at = Column(DateTime, default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="更新时间")
 
     def __repr__(self):
-        return f"<Paper(arxiv_id={self.arxiv_id}, title={self.title[:30]}...)>"
+        return f"<News(title={self.title[:30]}...)>"
