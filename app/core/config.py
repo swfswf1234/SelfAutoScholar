@@ -36,10 +36,10 @@ class Settings(BaseSettings):
     # === 默认用户配置 ===
     default_user: str = Field(default="postgres")
 
-    # === LLM 配置 (OpenAI 兼容) ===
-    llm_api_base: str = Field(default="https://api.openai.com/v1")
-    llm_api_key: str = Field(default="sk-xxx")
-    llm_model: str = Field(default="gpt-4o-mini")
+    # === LLM 配置 (GLM5 兼容) ===
+    llm_api_base: str = Field(default="https://open.bigmodel.cn/api/paas/v4")
+    llm_api_key: str = Field(default="")
+    llm_model: str = Field(default="glm-5")
 
     # === 本地 LLM 配置 ===
     local_llm_api_base: str = Field(default="http://127.0.0.1:5001/v1")
@@ -69,6 +69,15 @@ class Settings(BaseSettings):
 
     # === 日志配置 ===
     log_level: str = Field(default="INFO")
+
+    # === GitHub 配置 ===
+    github_api_base: str = Field(default="https://api.github.com")
+    github_token: str = Field(default="")
+
+    # === 新闻配置 ===
+    news_rss_feeds: list[str] = Field(
+        default=["https://news.ycombinator.com/rss", "https://www.techcrunch.com/feed/"]
+    )
 
     class Config:
         env_prefix = "SAS_"  # 环境变量前缀
@@ -113,9 +122,9 @@ def load_settings_from_ini() -> Settings:
 
     if config.has_section("LLM"):
         sec = config["LLM"]
-        kwargs["llm_api_base"] = sec.get("external_api_base", "https://api.openai.com/v1")
-        kwargs["llm_api_key"] = sec.get("external_api_key", "sk-xxx")
-        kwargs["llm_model"] = sec.get("external_model", "gpt-4o-mini")
+        kwargs["llm_api_base"] = sec.get("external_api_base", "https://open.bigmodel.cn/api/paas/v4")
+        kwargs["llm_api_key"] = sec.get("external_api_key", "")
+        kwargs["llm_model"] = sec.get("external_model", "glm-5")
         kwargs["local_llm_api_base"] = sec.get("local_api_base", "http://127.0.0.1:5001/v1")
         kwargs["local_llm_api_key"] = sec.get("local_api_key", "lm-studio")
         kwargs["local_llm_model"] = sec.get("local_model", "qwen/qwen3.5-9b")
@@ -146,6 +155,16 @@ def load_settings_from_ini() -> Settings:
     if config.has_section("User"):
         sec = config["User"]
         kwargs["default_user"] = sec.get("default_user", "postgres")
+
+    if config.has_section("GitHub"):
+        sec = config["GitHub"]
+        kwargs["github_api_base"] = sec.get("github_api_base", "https://api.github.com")
+        kwargs["github_token"] = sec.get("github_token", "")
+
+    if config.has_section("News"):
+        sec = config["News"]
+        rss_str = sec.get("rss_feeds", "https://news.ycombinator.com/rss,https://www.techcrunch.com/feed/")
+        kwargs["news_rss_feeds"] = [k.strip() for k in rss_str.split(",") if k.strip()]
 
     return Settings(**kwargs)
 

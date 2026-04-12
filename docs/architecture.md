@@ -201,7 +201,7 @@
 SelfAutoScholar/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                     # FastAPI 入口 & 定时任务挂载
+│   ├── main.py                     # 统一入口，支持 arXiv + GitHub
 │   │
 │   ├── api/                        # REST API 路由层
 │   │   ├── __init__.py
@@ -220,6 +220,7 @@ SelfAutoScholar/
 │   │   ├── __init__.py
 │   │   ├── config.py               # pydantic-settings 读取 setting.ini
 │   │   ├── database.py             # SQLAlchemy Engine & Session 工厂
+│   │   ├── preflight_check.py      # 启动前校验 (DB + 模型 + GitHub)
 │   │   └── logger.py               # loguru 日志配置
 │   │
 │   ├── models/                     # SQLAlchemy ORM 模型
@@ -244,16 +245,17 @@ SelfAutoScholar/
 │   │   ├── __init__.py
 │   │   ├── arxiv_client.py         # arXiv API 客户端 (论文检索)
 │   │   ├── github_client.py        # GitHub API 客户端 (项目检索)
-│   │   ├── news_client.py          # RSS/Feed 新闻客户端
-│   │   ├── mcp_client.py           # MCP 协议客户端 (增强搜索)
+│   │   ├── news_client.py          # RSS/Feed 新闻客户端 (待实现)
 │   │   ├── llm_service.py          # LLM 调用封装 (本地 + 外部)
+│   │   ├── dedup.py                # 统一去重服务 (标题/GitHub ID 精确匹配)
+│   │   ├── download_manager.py     # 统一下载管理 (PDF + README)
+│   │   ├── report_generator.py     # 统一报告生成 (Markdown 简报)
+│   │   ├── pdf_downloader.py       # PDF 下载器
 │   │   ├── pdf_processor.py        # PDF 解析 (pymupdf4llm)
-│   │   ├── evaluator.py            # 重要性/相关性/兴趣评估
-│   │   ├── dedup.py                # 去重检查 (标题精确匹配)
-│   │   ├── downloader.py           # 文件下载 & 存储
+│   │   ├── mcp_client.py           # MCP 协议客户端 (增强搜索)
 │   │   └── obsidian_sync.py        # Obsidian Vault 同步
 │   │
-│   ├── agents/                     # LangChain Agent 定义
+│   ├── agents/                     # LangChain Agent 定义 (待实现)
 │   │   ├── __init__.py
 │   │   ├── discovery_agent.py      # 数据发现 & 筛选 Agent
 │   │   ├── analysis_agent.py       # 深度分析 Agent (翻译/总结/提取)
@@ -263,12 +265,17 @@ SelfAutoScholar/
 │       ├── __init__.py
 │       └── daily_job.py            # 每日抓取任务
 │
+├── test/                          # 测试/演示脚本
+│   ├── demo_arxiv_pipeline.py     # arXiv 论文流程演示
+│   ├── demo_github_search.py      # GitHub 项目搜索演示
+│   └── demo_full_pipeline.py     # 完整流程演示 (待实现)
+│
 ├── data/
 │   └── downloads/                  # 本地文件存储 (按日期)
 │       └── YYYY-MM-DD/
 │           ├── papers/             # 论文 PDF
 │           ├── projects/           # 项目 README.md
-│           └── news/               # 新闻全文
+│           └── news/               # 新闻全文 (待实现)
 │
 ├── exports/
 │   └── markdown/                   # 导出的 Markdown 简报
@@ -286,17 +293,11 @@ SelfAutoScholar/
 │   ├── versions/
 │   └── env.py
 │
-├── tests/                          # 测试
-│   ├── conftest.py
-│   ├── test_services/
-│   └── test_api/
-│
 ├── docs/                           # 文档
 │   ├── architecture.md             # 本文件
 │   ├── api.md                      # API 接口设计
 │   ├── database.md                 # 数据库设计
-│   ├── installation.md             # 安装指南
-│   └── configuration.md            # 配置说明
+│   └── installation.md             # 安装指南
 │
 ├── setting.ini                     # 配置文件
 ├── requirements.txt                # 生产依赖
@@ -305,6 +306,15 @@ SelfAutoScholar/
 ├── LICENSE
 └── README.md
 ```
+
+### 新增服务说明 (v2.0)
+
+| 服务 | 文件 | 功能 |
+|------|------|------|
+| 统一去重 | `services/dedup.py` | 论文按标题去重，项目按 GitHub ID 去重 |
+| 下载管理 | `services/download_manager.py` | 统一管理 PDF 和 README 下载 |
+| 报告生成 | `services/report_generator.py` | 生成 Markdown 简报 (论文+项目) |
+| 预检验证 | `core/preflight_check.py` | 校验数据库、本地模型、GitHub 配置 |
 
 ### 关键目录说明
 
@@ -333,29 +343,9 @@ SelfAutoScholar/
 
 **规则：精确标题匹配**
 
-```python
-def is_duplicate(title: str, item_type: str) -> bool:
-    """检查标题是否已存在于数据库中"""
-    if item_type == "paper":
-        return db.query(Paper).filter(Paper.title == title).first() is not None
-    elif item_type == "project":
-        return db.query(Project).filter(Project.github_id == github_id).first() is not None
-    elif item_type == "news":
-        return db.query(News).filter(News.title == title).first() is not None
-    return False
-```
-
 ### 3. Evaluator — 智能评估
 
 调用外部 LLM API，对每条资料输出三个二元标签：
-
-```json
-{
-  "importance": "important",      // important | not_important
-  "relevance": "relevant",        // relevant | not_relevant
-  "interest": "interested"        // interested | not_interested
-}
-```
 
 ### 4. Download Decision — 下载决策
 
@@ -386,6 +376,40 @@ def is_duplicate(title: str, item_type: str) -> bool:
 ```
 用户标注 "感兴趣" → 增加相关领域/关键词权重
 用户标注 "不感兴趣" → 降低相关领域/关键词权重
+```
+
+## 使用方式
+
+### 命令行使用
+
+```bash
+# 完整流程 (arXiv + GitHub)
+python -m app.main --source all
+
+# 仅 arXiv 论文
+python -m app.main --source arxiv
+
+# 仅 GitHub 项目
+python -m app.main --source github
+
+# 指定关键词
+python -m app.main --source all --keywords "LLM,RAG,vector database"
+
+# 跳过数据库模式 (单机运行)
+python -m app.main --source all --no-db
+
+# 跳过预检验证
+python -m app.main --source all --skip-preflight
+```
+
+### 测试/演示脚本
+
+```bash
+# arXiv 论文流程演示
+python test/demo_arxiv_pipeline.py --search "LLM" --max 5
+
+# GitHub 项目搜索演示
+python test/demo_github_search.py --search "LLM" --max 5
 ```
 
 ## 配置项
