@@ -1,26 +1,26 @@
-"""数据库连接模块"""
+"""数据库连接 — 连接池 + Session 管理"""
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
-# 创建数据库引擎
 engine = create_engine(
     settings.db_url,
-    echo=False,  # 设为 True 可打印 SQL 日志
+    echo=False,
+    poolclass=QueuePool,
+    pool_size=5,
+    max_overflow=10,
     pool_pre_ping=True,
+    pool_recycle=3600,
 )
 
-# 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# 声明基类
 Base = declarative_base()
 
 
 def get_db():
-    """获取数据库会话 (依赖注入用)"""
     db = SessionLocal()
     try:
         yield db
@@ -28,18 +28,28 @@ def get_db():
         db.close()
 
 
-def init_db():
-    """初始化数据库，仅在表不存在时创建（幂等操作）"""
+def get_conn():
+    return SessionLocal()
+
+
+def init_tables():
+    """创建所有表 (幂等: IF NOT EXISTS)"""
     from sqlalchemy import inspect
-    
-    # 导入所有模型，确保 Base.metadata 包含所有表
-    from app.models import User, Paper, Project, News, Material, UserLabel
-    
+    from app.models import Base as ModelsBase
     inspector = inspect(engine)
-    existing_tables = set(inspector.get_table_names())
-    tables_to_create = [
-        t for t in Base.metadata.tables.values()
-        if t.name not in existing_tables
-    ]
-    if tables_to_create:
-        Base.metadata.create_all(bind=engine, tables=tables_to_create)
+    existing = set(inspector.get_table_names())
+    tables = [t for t in ModelsBase.metadata.tables.values() if t.name not in existing]
+    if tables:
+        ModelsBase.metadata.create_all(bind=engine, tables=tables)
+        return len(tables)
+    return 0
+
+
+def check_db() -> bool:
+    """测试数据库连通性"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False

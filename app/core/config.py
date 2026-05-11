@@ -1,5 +1,3 @@
-"""配置读取模块 - 从 setting.ini 和环境变量读取配置"""
-
 import os
 from pathlib import Path
 from configparser import ConfigParser
@@ -9,7 +7,6 @@ from pydantic_settings import BaseSettings
 
 
 def load_ini_config() -> dict:
-    """从 setting.ini 读取配置"""
     config = ConfigParser()
     ini_path = Path(__file__).parent.parent.parent / "setting.ini"
     if ini_path.exists():
@@ -18,69 +15,43 @@ def load_ini_config() -> dict:
 
 
 class Settings(BaseSettings):
-    """应用配置"""
-
-    # === 路径配置 ===
     base_path: str = Field(default=".")
-    downloads_dir: str = Field(default="data/downloads")
-    exports_dir: str = Field(default="exports/markdown")
-    logs_dir: str = Field(default="logs")
+
+    # === 数据集路径 ===
+    dataset_dir: str = Field(default="dataset")
 
     # === 数据库配置 ===
     db_host: str = Field(default="localhost")
     db_port: int = Field(default=5432)
-    db_name: str = Field(default="selfautoscholar")
+    db_name: str = Field(default="qed_tracker")
     db_user: str = Field(default="postgres")
-    db_password: str = Field(default="123456")
+    db_password: str = Field(default="")
 
-    # === 默认用户配置 ===
-    default_user: str = Field(default="postgres")
-
-    # === LLM 配置 (GLM5 兼容) ===
-    llm_api_base: str = Field(default="https://open.bigmodel.cn/api/paas/v4")
-    llm_api_key: str = Field(default="")
-    llm_model: str = Field(default="glm-5")
-
-    # === 本地 LLM 配置 ===
+    # === LLM 配置 ===
     local_llm_api_base: str = Field(default="http://127.0.0.1:5001/v1")
     local_llm_api_key: str = Field(default="lm-studio")
     local_llm_model: str = Field(default="qwen/qwen3.5-9b")
 
-    # === LLM Provider 选择 ===
-    # evaluation_provider: 论文评估任务使用哪个 provider (local / external)
-    evaluation_provider: str = Field(default="local")
-    # reasoning_provider: 推理/分析任务使用哪个 provider (local / external)
-    reasoning_provider: str = Field(default="external")
-
     # === Discovery 配置 ===
     search_keywords: list[str] = Field(
-        default=["LLM", "Large Language Model", "NLP", "Machine Learning"]
+        default=["数学分析", "实变函数", "泛函分析", "复变函数", "偏微分方程"]
     )
-    max_candidates: int = Field(default=20)
-    max_downloads: int = Field(default=10)
+    arxiv_math_domains: list[str] = Field(
+        default=["math.CA", "math.FA", "math.AP", "math.CV"]
+    )
+
+    # === GitHub 配置 ===
+    github_token: str = Field(default="")
 
     # === API 配置 ===
-    api_enable: bool = Field(default=True)
-    api_port: int = Field(default=8001)
     api_host: str = Field(default="0.0.0.0")
-
-    # === 安全配置 ===
-    api_key: str = Field(default="your_api_key_here")
+    api_port: int = Field(default=8001)
 
     # === 日志配置 ===
     log_level: str = Field(default="INFO")
 
-    # === GitHub 配置 ===
-    github_api_base: str = Field(default="https://api.github.com")
-    github_token: str = Field(default="")
-
-    # === 新闻配置 ===
-    news_rss_feeds: list[str] = Field(
-        default=["https://news.ycombinator.com/rss", "https://www.techcrunch.com/feed/"]
-    )
-
     class Config:
-        env_prefix = "SAS_"  # 环境变量前缀
+        env_prefix = "QED_"
 
     @property
     def db_url(self) -> str:
@@ -90,84 +61,60 @@ class Settings(BaseSettings):
     def project_root(self) -> Path:
         return Path(__file__).parent.parent.parent
 
-    def get_downloads_path(self) -> Path:
-        """获取下载目录的绝对路径"""
-        return self.project_root / self.downloads_dir
-
-    def get_exports_path(self) -> Path:
-        """获取导出目录的绝对路径"""
-        return self.project_root / self.exports_dir
+    @property
+    def dataset_path(self) -> Path:
+        path = Path(self.dataset_dir)
+        if path.is_absolute():
+            return path
+        return self.project_root / path
 
 
 def load_settings_from_ini() -> Settings:
-    """从 setting.ini 加载配置并创建 Settings 实例"""
     config = load_ini_config()
-
     kwargs = {}
 
     if config.has_section("Paths"):
         sec = config["Paths"]
-        kwargs["base_path"] = sec.get("base_path", ".")
-        kwargs["downloads_dir"] = sec.get("downloads_dir", "data/downloads")
-        kwargs["exports_dir"] = sec.get("exports_dir", "exports/markdown")
-        kwargs["logs_dir"] = sec.get("logs_dir", "logs")
+        if sec.get("dataset_dir"):
+            kwargs["dataset_dir"] = sec.get("dataset_dir")
 
     if config.has_section("Postgres"):
         sec = config["Postgres"]
         kwargs["db_host"] = sec.get("host", "localhost")
         kwargs["db_port"] = sec.getint("port", 5432)
-        kwargs["db_name"] = sec.get("database", "selfautoscholar")
+        kwargs["db_name"] = sec.get("database", "qed_tracker")
         kwargs["db_user"] = sec.get("user", "postgres")
-        kwargs["db_password"] = sec.get("password", "123456")
+        kwargs["db_password"] = sec.get("password", "")
 
     if config.has_section("LLM"):
         sec = config["LLM"]
-        kwargs["llm_api_base"] = sec.get("external_api_base", "https://open.bigmodel.cn/api/paas/v4")
-        kwargs["llm_api_key"] = sec.get("external_api_key", "")
-        kwargs["llm_model"] = sec.get("external_model", "glm-5")
         kwargs["local_llm_api_base"] = sec.get("local_api_base", "http://127.0.0.1:5001/v1")
         kwargs["local_llm_api_key"] = sec.get("local_api_key", "lm-studio")
         kwargs["local_llm_model"] = sec.get("local_model", "qwen/qwen3.5-9b")
-        kwargs["evaluation_provider"] = sec.get("evaluation_provider", "local")
-        kwargs["reasoning_provider"] = sec.get("reasoning_provider", "external")
 
     if config.has_section("Discovery"):
         sec = config["Discovery"]
-        keywords_str = sec.get("search_keywords", "LLM, Large Language Model, NLP, Machine Learning")
-        kwargs["search_keywords"] = [k.strip() for k in keywords_str.split(",") if k.strip()]
-        kwargs["max_candidates"] = sec.getint("max_candidates", 20)
-        kwargs["max_downloads"] = sec.getint("max_downloads", 10)
+        kw_str = sec.get("search_keywords", "")
+        if kw_str:
+            kwargs["search_keywords"] = [k.strip() for k in kw_str.split(",") if k.strip()]
+        domain_str = sec.get("arxiv_math_domains", "")
+        if domain_str:
+            kwargs["arxiv_math_domains"] = [d.strip() for d in domain_str.split(",") if d.strip()]
+
+    if config.has_section("GitHub") and config["GitHub"].get("token"):
+        kwargs["github_token"] = config["GitHub"]["token"]
 
     if config.has_section("API"):
         sec = config["API"]
-        kwargs["api_enable"] = sec.getboolean("enable", True)
-        kwargs["api_port"] = sec.getint("port", 8001)
-        kwargs["api_host"] = sec.get("host", "0.0.0.0")
-
-    if config.has_section("Security"):
-        sec = config["Security"]
-        kwargs["api_key"] = sec.get("api_key", "your_api_key_here")
+        if sec.get("host"):
+            kwargs["api_host"] = sec.get("host")
+        if sec.get("port"):
+            kwargs["api_port"] = sec.getint("port", 8001)
 
     if config.has_section("Logging"):
-        sec = config["Logging"]
-        kwargs["log_level"] = sec.get("level", "INFO")
-
-    if config.has_section("User"):
-        sec = config["User"]
-        kwargs["default_user"] = sec.get("default_user", "postgres")
-
-    if config.has_section("GitHub"):
-        sec = config["GitHub"]
-        kwargs["github_api_base"] = sec.get("github_api_base", "https://api.github.com")
-        kwargs["github_token"] = sec.get("github_token", "")
-
-    if config.has_section("News"):
-        sec = config["News"]
-        rss_str = sec.get("rss_feeds", "https://news.ycombinator.com/rss,https://www.techcrunch.com/feed/")
-        kwargs["news_rss_feeds"] = [k.strip() for k in rss_str.split(",") if k.strip()]
+        kwargs["log_level"] = config["Logging"].get("level", "INFO")
 
     return Settings(**kwargs)
 
 
-# 全局配置实例
 settings = load_settings_from_ini()

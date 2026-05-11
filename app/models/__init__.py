@@ -1,9 +1,7 @@
-# Models module
-from app.models.user import User
+from app.core.database import Base
+from app.models.textbook import Textbook
 from app.models.paper import Paper
-from app.models.project import Project
-from app.models.news import News
-from app.models.material import Material
-from app.models.user_label import UserLabel
+from app.models.official_doc import OfficialDoc
+from app.models.resource import Resource
 
-__all__ = ["User", "Paper", "Project", "News", "Material", "UserLabel"]
+__all__ = ["Base", "Textbook", "Paper", "OfficialDoc", "Resource"]

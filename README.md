@@ -1,87 +1,67 @@
-# SelfAutoScholar
+# QED-Tracker v0.1
 
-SelfAutoScholar 是一个本地部署的每日资讯聚合系统，自动从 arXiv、GitHub、RSS 新闻源抓取你可能感兴趣的内容，经过去重、筛选、分析后生成结构化简报，并支持 Obsidian 知识库同步。
+> **QED-Engine Part 1** — 面向数学博士资格考试 (QE) 的资源检索与分类引擎。
+> 按《突破朗道位垒》课程目录，检索教材 PDF、arXiv 论文、官方文档，分门别类存入本地 dataset，建立 PostgreSQL 索引。
 
-为未来的**个人知识库构建**和**知识讲解 Agent** 提供高质量、已清洗、结构化的底层数据。
-
-## 核心功能 | Core Features
+## 核心功能
 
 | 功能 | 说明 |
 |------|------|
-| 论文发现 | 通过 arXiv API 检索最新论文，按领域/关键词匹配 |
-| 项目追踪 | GitHub 热门项目发现，评估功能与价值 |
-| 新闻聚合 | RSS/可信科技媒体新闻抓取与分析 |
-| 智能去重 | 标题、DOI、URL 多维度去重，避免重复推送 |
-| 重要性评估 | 外部 LLM 评估内容重要性与用户相关性 (1-10 分) |
-| PDF 深度解析 | PDF → Markdown 转换，含图表提取与外文翻译 |
-| 内容摘要 | AI 生成论文观点、项目价值、新闻要点摘要 |
-| 兴趣迭代 | 根据用户打标行为自动优化推荐偏好 |
-| Obsidian 同步 | 用户画像、阅读记录、知识标签同步至 Obsidian Vault |
+| **教材检索** | 通过 Library Genesis 搜索目标教材 PDF，交互确认后下载到 `dataset/textbooks/{course}/` |
+| **论文检索** | 通过 arXiv API 按数学分类 (math.CA/FA/AP/CV) 搜索，逐篇确认后下载到 `dataset/papers/{year}/` |
+| **文档爬取** | 通过 wget --mirror 爬取官方文档 (PyTorch/scikit-learn/YOLO)，保留完整 HTML 结构 |
+| **数据库索引** | 所有资源元数据存入 PostgreSQL 4 张表：textbooks / papers / official_docs / resources |
 
-## 技术栈 | Tech Stack
+## 快速开始
 
-| 组件 | 技术选型 | 用途 |
-|------|----------|------|
-| Web 框架 | FastAPI | REST API 接口 |
-| 数据库 | PostgreSQL + SQLAlchemy | 数据持久化 |
-| 本地 LLM | LM Studio | 下载、翻译、总结 |
-| 外部 LLM | OpenAI 兼容 API | 深度推理、重要性评分 |
-| MCP 协议 | mcp SDK | 网络资料搜索增强 |
-| PDF 处理 | pymupdf4llm | PDF → LLM 友好格式 |
-| 任务调度 | APScheduler | 每日定时执行 |
-| 知识库 | Obsidian (Markdown) | 用户偏好、知识图谱 |
-
-## 系统架构 | Architecture
-
-> 详见 [docs/architecture.md](docs/architecture.md)
-
-## 安装指南 | Installation
-
-> 详见 [docs/installation.md](docs/installation.md)
-
-**环境要求：**
-- Python 3.10+
-- PostgreSQL 14+
-- LM Studio (本地 LLM 部署)
-- Obsidian (可选，用于知识库同步)
-
-**快速安装：**
 ```bash
-git clone <repo-url>
-cd SelfAutoScholar
+# 1. 复制配置模板
+cp setting.example.ini setting.ini
+# 编辑 setting.ini: 填写 PostgreSQL 密码
+
+# 2. 安装依赖
 pip install -r requirements.txt
+
+# 3. 初始化数据库
+python scripts/init_db.py --create-db
+
+# 4. 扫描已有文件入库
+python scripts/scan_dataset.py
+
+# 5. 检索教材
+python scripts/hunt_textbooks.py
+
+# 6. 检索论文
+python scripts/hunt_papers.py --domain math.CA --max 10
+
+# 7. 爬取官方文档
+python scripts/hunt_docs.py --name pytorch
 ```
 
-## 配置说明 | Configuration
-配置文件为 `setting.ini`，包含数据库连接、MCP 服务地址、API Key、本地模型路径等。
+## 项目结构
 
-## 数据库设计 | Database Schema
+```
+QED-Tracker/
+├── app/
+│   ├── collectors/        # 采集器 (教材/论文/文档)
+│   ├── core/              # 配置 + 数据库连接
+│   ├── models/            # ORM 模型 (4 表)
+│   ├── repository/        # 仓储层 (CRUD)
+│   └── services/          # arXiv API 客户端
+├── scripts/               # CLI 入口 (5 个)
+├── docs/                  # 设计文档
+├── dataset/               # 资源存储 (.gitignore)
+│   ├── textbooks/         # 教材 PDF (按课程编号)
+│   ├── papers/            # 论文 PDF (按年份)
+│   └── official_docs/     # 官方文档 (HTML 结构)
+├── setting.ini            # 本地配置 (.gitignore)
+└── setting.example.ini    # 配置模板
+```
 
-> 详见 [docs/database.md](docs/database.md)
+## 数据集
 
-核心表结构：
-- `users` — 用户信息与兴趣画像
-- `papers` — 论文数据 (含摘要、评分、用户标签)
-- `projects` — GitHub 项目数据
-- `news` — 新闻数据
-- `materials` — 资料汇总视图
-- `user_labels` — 用户打标记录
+已有文件位于 `dataset/textbooks/`：
+- `01_math_analysis/` — Rudin 中译本 + 吉米多维奇习题集 (3 PDF)
+- `02_linear_algebra/` — Axler 中译本 + 苏联习题集 (2 PDF)
 
-## 使用指南 | Usage Guide
-
-> 详见 [docs/api.md](docs/api.md)
-
-
-## 开发计划 | Roadmap
-
-- [ ] MVP: arXiv 论文每日抓取与筛选
-- [ ] GitHub 项目发现与评估
-- [ ] RSS 新闻聚合
-- [ ] PDF 深度解析 (pymupdf4llm)
-- [ ] 用户打标与兴趣迭代
-- [ ] Obsidian 知识库同步
-- [ ] 每日 Markdown 简报自动生成
-
-## 许可证 | License
-
-[MIT](LICENSE)
+其余课程教材和论文等待检索。

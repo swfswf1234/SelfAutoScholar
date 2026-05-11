@@ -18,14 +18,12 @@ build/
 .env
 *.env
 
-# Data
-data/
-exports/markdown/
-logs/
+# Data (local dataset - contains downloaded resources)
+dataset/
 
-# Obsidian (optional)
-obsidian_vault/
+# Local config (contains local paths)
+setting.ini
 
-# OS
+# macOS
 .DS_Store
 Thumbs.db
