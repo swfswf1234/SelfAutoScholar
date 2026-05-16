@@ -223,7 +223,7 @@ class LibGenHunter:
 
     def _download_file(self, url: str, save_path: Path) -> bool:
         """分块下载：先试完整 GET，不完整则用 Range 块续传"""
-        CHUNK = 8 * 1024 * 1024  # 8MB per chunk
+        CHUNK = 3 * 1024 * 1024  # 3MB per chunk (Clash proxy cuts ~5-7MB)
 
         # Step 1: Full GET
         resp = self._do_get(url, timeout=300.0)
@@ -473,6 +473,63 @@ class TextbookHunter(BaseCollector):
                     print(f"    ✗ 下载失败")
                 break
 
+        return downloaded
+
+    def auto_search(self, course: str, query: str):
+        """自动模式：搜索并自动选择第一个合适的 PDF 下载"""
+        results = self.search_course(course, query)
+        save_dir = settings.dataset_path / "textbooks" / course
+        downloaded = []
+
+        if not results:
+            print("  [无结果]")
+            return downloaded
+
+        # Filter: skip annas-archive garbage (no valid title/author)
+        valid = [r for r in results if r.get("_source") != "annas-archive"
+                 and r.get("title") and len(r["title"]) > 5]
+        # Prefer larger files
+        def _size_bytes(s: str) -> int:
+            if not s:
+                return 0
+            s = s.strip().upper()
+            try:
+                if "MB" in s:
+                    return int(float(s.replace("MB", "").strip()) * 1024 * 1024)
+                if "KB" in s:
+                    return int(float(s.replace("KB", "").strip()) * 1024)
+                if "GB" in s:
+                    return int(float(s.replace("GB", "").strip()) * 1024 * 1024 * 1024)
+                return int(s)
+            except ValueError:
+                return 0
+
+        valid.sort(key=lambda r: _size_bytes(r.get("size", "")), reverse=True)
+
+        if not valid:
+            print("  无有效 PDF 结果 (跳过 Anna's Archive 垃圾结果)")
+            return downloaded
+
+        pick = valid[0]
+        print(f"  自动选择: [{pick['title'][:60]} | {pick.get('size', '')}]")
+
+        safe_title = re.sub(r'[<>:"/\\|?*]', "", pick["title"]).strip()[:80]
+        safe_title = re.sub(r'\s+', "_", safe_title)
+        filename = f"{safe_title}.pdf"
+        filepath = save_dir / filename
+
+        if filepath.exists():
+            print(f"    已存在，跳过: {filename}")
+            return downloaded
+
+        print(f"    下载中... ({pick.get('size', '?')})")
+        ok = self.libgen.download(pick["download_url"], filepath)
+        if ok:
+            rel = filepath.relative_to(settings.dataset_path)
+            print(f"    ✓ 已保存: {rel}")
+            downloaded.append({**pick, "local_path": str(rel.as_posix()), "course": course})
+        else:
+            print(f"    ✗ 下载失败")
         return downloaded
 
     def interactive_all(self):

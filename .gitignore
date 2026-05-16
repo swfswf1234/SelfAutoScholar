@@ -21,9 +21,6 @@ build/
 # Local config (contains local paths)
 setting.ini
 
-# Dataset (downloaded content)
-dataset/
-
 # Temp test files
 _test_*.py
 _dl_*

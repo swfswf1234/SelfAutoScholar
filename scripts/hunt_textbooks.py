@@ -3,12 +3,17 @@
 遍历所有课程，搜索目标教材 PDF，下载到 dataset/textbooks/。
 
 用法:
-    python scripts/hunt_textbooks.py                  # 遍历所有课程
+    python scripts/hunt_textbooks.py                  # 遍历全部，交互式
+    python scripts/hunt_textbooks.py --auto           # 遍历全部，自动选第一个 PDF
     python scripts/hunt_textbooks.py --course 03      # 仅检索第3门课
     python scripts/hunt_textbooks.py --no-db          # 跳过数据库写入
 """
 
 import sys
+import io
+# Force UTF-8 for console output (avoid GBK encoding errors)
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -61,6 +66,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="教材检索")
     parser.add_argument("--course", type=str, help=f"课程编号 (如 03, 04)，不传则遍历全部")
     parser.add_argument("--no-db", action="store_true", help="跳过数据库写入")
+    parser.add_argument("--auto", action="store_true", help="自动模式：自动选择第一个 PDF，跳过交互")
     return parser.parse_args(argv)
 
 
@@ -86,26 +92,28 @@ def main():
         en_q = targets.get("en", "").split(";")[0].strip() if targets.get("en") else ""
         zh_ex = targets.get("zh_exercise", "")
 
+        search_fn = hunter.auto_search if args.auto else hunter.interactive_search
+
         # 1. 搜索中文教材
         if zh_q:
             print(f"\n{'='*60}")
             print(f"课程: {course} (中文教材: {zh_q})")
             print(f"{'='*60}")
-            all_results.extend(hunter.interactive_search(course, zh_q))
+            all_results.extend(search_fn(course, zh_q))
 
         # 2. 搜索英文教材
         if en_q:
             print(f"\n{'='*60}")
             print(f"课程: {course} (英文教材: {en_q})")
             print(f"{'='*60}")
-            all_results.extend(hunter.interactive_search(course, en_q))
+            all_results.extend(search_fn(course, en_q))
 
         # 3. 搜索习题集
         if zh_ex:
             print(f"\n{'='*60}")
             print(f"课程: {course} (习题集: {zh_ex})")
             print(f"{'='*60}")
-            all_results.extend(hunter.interactive_search(course, zh_ex))
+            all_results.extend(search_fn(course, zh_ex))
 
     hunter.libgen.close()
     hunter.anna.close()

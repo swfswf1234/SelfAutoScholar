@@ -15,16 +15,19 @@
 | T-009 | 数据 | 已有 5 本教材 PDF 归位 | ✅ |
 | T-010 | 清理 | 删除旧代码 (src/test/schemas/旧 services) | ✅ |
 | T-011 | 文档 | 全部文档重写 (README/arch/schema/trackers/kb) | ✅ |
+| T-101 | 执行 | 教材下载 Phase 1 (03-10, 成功 17 个文件) | ✅ |
+| T-012 | 采集器 | LibGen Range 分块续传下载 | ✅ |
+| T-013 | 数据 | 406MB 数据集入库 git | ✅ |
 
 ## 后续待办
 
 | ID | 类型 | 描述 | 优先级 |
 |----|------|------|--------|
-| T-101 | 执行 | 检索教材 03-10 (中文教材 + 英文教材 + 习题集) | P1 |
-| T-102 | 执行 | 按领域检索 arXiv 论文 | P2 |
-| T-103 | 执行 | 爬取 PyTorch/scikit-learn/YOLO 文档 | P2 |
-| T-104 | 功能 | resources 表对接 (博客/视频/项目链接) | P3 |
-| T-105 | 功能 | GitHub 项目检索 (入 resources 表) | P3 |
+| T-201 | 执行 | 补齐缺失教材 (点集拓扑 熊金城, Stein RA/CA, Evans PDE 等 9 本) | P1 |
+| T-202 | 执行 | 按领域检索 arXiv 论文 | P2 |
+| T-203 | 执行 | 爬取 PyTorch/scikit-learn/YOLO 文档 | P2 |
+| T-204 | 功能 | resources 表对接 (博客/视频/项目链接) | P3 |
+| T-205 | 功能 | GitHub 项目检索 (入 resources 表) | P3 |
 
 ## 已解决
 
