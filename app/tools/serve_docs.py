@@ -10,10 +10,11 @@
 """
 
 import argparse
+import os
 import webbrowser
 from pathlib import Path
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 from app.core.config import settings
 
@@ -24,10 +25,38 @@ DOCS_DIR = settings.dataset_path / "official_docs"
 class DocsHandler(SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(DOCS_DIR.resolve()), **kwargs)
+        self._docs_dir = str(DOCS_DIR.resolve())
+        super().__init__(*args, directory=self._docs_dir, **kwargs)
 
     def log_message(self, fmt, *args):
-        print(f"[DocServer] {args[0]} {args[1]} {args[2]}")
+        msg = fmt % args
+        print(f"[DocServer] {msg}")
+
+    def translate_path(self, path):
+        """Override to handle wget's query-string filename mangling.
+
+        wget --adjust-extension saves `style.css?digest=abc` as the
+        literal filename `style.css?digest=abc.css` on disk.
+        The browser requests `style.css?digest=abc`, but the base
+        translate_path strips the query string and looks for
+        `style.css`, which doesn't exist.  We glob for candidates.
+        """
+        parsed = urlparse(path)
+        clean = parsed.path
+        raw = super().translate_path(clean)
+        if os.path.exists(raw):
+            return raw
+
+        # The file on disk may be e.g. "style.css?digest=xxx.css"
+        # so we glob the parent directory for a match.
+        parent = os.path.dirname(raw)
+        basename = os.path.basename(raw)
+        if os.path.isdir(parent):
+            for f in os.listdir(parent):
+                if f.startswith(basename):
+                    return os.path.join(parent, f)
+
+        return raw
 
     def do_GET(self):
         path = unquote(self.path)
@@ -63,11 +92,11 @@ class DocsHandler(SimpleHTTPRequestHandler):
             </div>"""
 
         return f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QED DocViewer — 本地文档入口</title>
+<title>QED DocViewer</title>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -93,16 +122,16 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans
 <body>
 <div class="header">
     <h1>QED DocViewer</h1>
-    <p>本地官方文档镜像 — 点击卡片进入对应文档</p>
+    <p>Local documentation mirrors — click a card to browse</p>
 </div>
 <div class="container">
     {cards if cards else '''
     <div class="empty">
-        <h2>暂无文档镜像</h2>
-        <p>请先运行 <code>python scripts/hunt_docs.py --all</code> 下载文档</p>
+        <h2>No documentation mirrors found</h2>
+        <p>Run <code>python scripts/hunt_docs.py --all</code> to download docs</p>
     </div>'''}
 </div>
-<div class="footer">QED-Tracker · dataset/official_docs/</div>
+<div class="footer">QED-Tracker / dataset/official_docs/</div>
 </body>
 </html>"""
 
@@ -137,19 +166,19 @@ def main():
     url = f"http://{args.host}:{args.port}"
 
     print(f"{'='*50}")
-    print(f"  QED DocViewer 启动")
+    print(f"  QED DocViewer started")
     print(f"  URL:  {url}")
-    print(f"  目录: {DOCS_DIR}")
+    print(f"  DOCS: {DOCS_DIR}")
     print(f"{'='*50}")
-    print(f"  已镜像项目:")
+    print(f"  Projects:")
     if DOCS_DIR.exists():
         for entry in sorted(DOCS_DIR.iterdir()):
             if entry.is_dir():
                 index = DocsHandler._find_entry_file(entry)
                 if index:
-                    print(f"    ✅ {entry.name} -> {url}/{index}")
+                    print(f"    [OK] {entry.name} -> {url}/{index}")
                 else:
-                    print(f"    ⚠️  {entry.name} (未找到入口 HTML)")
+                    print(f"    [!] {entry.name} (no entry HTML)")
     print(f"{'='*50}")
 
     if args.open:
@@ -158,7 +187,7 @@ def main():
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[DocServer] 服务已停止")
+        print("\n[DocServer] service stopped")
         server.server_close()
 
 

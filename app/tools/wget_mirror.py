@@ -17,11 +17,11 @@ class WgetMirror:
         "--page-requisites",
         "--no-parent",
         "--no-host-directories",
-        "--wait=2",
         "--random-wait",
         "--limit-rate=1M",
         "--user-agent=Mozilla/5.0 (compatible; QED-Tracker/0.2)",
     ]
+    """Base wget args. --wait=N is injected at runtime via mirror()'s wait param."""
 
     def __init__(self, proxy: str = ""):
         self.proxy = proxy
@@ -32,11 +32,12 @@ class WgetMirror:
         rest = path.as_posix()[2:]
         return f"/mnt/{drive}{rest}"
 
-    def mirror(self, name: str, url: str, output_dir: Path, timeout: int = 7200) -> dict:
+    def mirror(self, name: str, url: str, output_dir: Path, timeout: int = 7200, wait: float = 2.0) -> dict:
         output_dir.mkdir(parents=True, exist_ok=True)
         wsl_out = self._win_to_wsl_path(output_dir.resolve())
 
         args = list(self.WGET_ARGS)
+        args.insert(0, f"--wait={wait}")
         if self.proxy:
             host = "host.docker.internal"
             args.extend([

@@ -82,11 +82,13 @@ def main():
         return
 
     results = []
-    for name, url in targets:
+    for item in targets:
+        name, info = item
+        url, wait = info if isinstance(info, tuple) else (info, 2.0)
         print(f"\n{'='*60}")
-        print(f"爬取: {name} <- {url}")
+        print(f"爬取: {name} <- {url} (wait={wait}s)")
         print(f"{'='*60}")
-        r = scraper.scrape(name, url)
+        r = scraper.scrape(name, url, wait=wait)
         results.append(r)
         print(f"完成: {r['file_count']} 文件, {r['elapsed_seconds']}s")
 

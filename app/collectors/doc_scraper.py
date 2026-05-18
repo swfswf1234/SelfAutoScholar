@@ -6,11 +6,12 @@ from app.tools.wget_mirror import WgetMirror
 
 
 DOC_SOURCES = {
-    "pytorch": "https://pytorch.org/docs/stable/",
-    "scikit_learn": "https://scikit-learn.org/stable/",
-    "xgboost": "https://xgboost.readthedocs.io/en/stable/",
-    "yolo": "https://docs.ultralytics.com/",
+    "pytorch": ("https://docs.pytorch.org/docs/2.12/", 0.5),
+    "scikit_learn": ("https://scikit-learn.org/stable/", 2),
+    "xgboost": ("https://xgboost.readthedocs.io/en/stable/", 2),
+    "yolo": ("https://docs.ultralytics.com/", 1),
 }
+"""Each entry: name -> (url, wait_seconds). wait controls wget --wait=N (lower = faster)."""
 
 
 class DocScraper(BaseCollector):
@@ -19,13 +20,13 @@ class DocScraper(BaseCollector):
     def __init__(self, proxy: str = ""):
         self.mirror = WgetMirror(proxy=proxy)
 
-    def scrape(self, name: str, url: str) -> dict:
+    def scrape(self, name: str, url: str, wait: float = 2.0) -> dict:
         save_dir = settings.dataset_path / "official_docs" / name
-        return self.mirror.mirror(name, url, save_dir)
+        return self.mirror.mirror(name, url, save_dir, wait=wait)
 
     def scrape_all(self) -> list[dict]:
         results = []
-        for name, url in DOC_SOURCES.items():
-            r = self.scrape(name, url)
+        for name, (url, wait) in DOC_SOURCES.items():
+            r = self.scrape(name, url, wait=wait)
             results.append(r)
         return results

@@ -6,7 +6,7 @@
 
 | ID | 类型 | 描述 | 优先级 | 状态 |
 |----|------|------|--------|------|
-| T-201 | 执行 | 补齐缺失教材 (熊金城, Stein RA/CA, Evans PDE 等 9 本) | P1 | ⬜ |
+| T-201 | 执行 | 补齐缺失教材 (熊金城, Stein RA/CA, Evans PDE 等 9 本) | P1 | ⬜ (LibGen 搜索可达但下载失败，需替代源) |
 | T-202 | 执行 | 按领域检索 arXiv 论文 (math.CA/FA/AP/CV) | P2 | ⬜ |
 | T-203 | 执行 | 官方文档镜像 wget --mirror (pytorch/sklearn/xgboost/yolo) | P2 | 🔄 |
 | T-204 | 功能 | resources 表对接 (博客/视频/项目链接) | P3 | ⬜ |
@@ -24,9 +24,16 @@
 
 | 步骤 | 状态 |
 |------|------|
-| `app/tools/wget_mirror.py` 新建 | ✅ |
-| `app/collectors/doc_scraper.py` 改为 wget 方案 | ✅ |
-| xgboost 镜像验证 (276 files, 11MB) | ✅ |
-| sklearn 镜像 | 🔄 (运行中, 203 files, 17.8MB) |
-| pytorch 镜像 | ⬜ |
-| yolo 镜像 | ⬜ |
+| `app/tools/wget_mirror.py` 新建 + wait 参数 | ✅ |
+| `app/collectors/doc_scraper.py` 改为 wget 方案 + 每源独立 wait | ✅ |
+| `app/tools/serve_docs.py` 本地 HTTP 文档查看服务 | ✅ |
+| xgboost 镜像 (276 files, 11MB) | ✅ |
+| sklearn 镜像 (203 files, 17.8MB) | ✅ |
+| pytorch 镜像 (1549 files, 322MB) | ✅ |
+| yolo 镜像 (1751 files, 534MB, partial) | ⚠️ 2h 超时 |
+
+### 已知遗留问题
+
+- **YOLO 镜像超时**：`docs.ultralytics.com` 使用 Next.js，wget 可能陷入无限递归。当前已下载 1751 文件足够浏览，如需完整镜像需改用 httpx+BS4 方案
+- **CDN 外部资源**：PyTorch 的 Sphinx 主题引用了 Google Fonts 等 CDN 资源，wget 无法抓取，打开页面时需联网加载这些外部资源
+- **PyTorch 版本号**：当前镜像指向 `docs/2.12/`，版本更新后需手动更新 URL

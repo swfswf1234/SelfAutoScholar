@@ -27,7 +27,7 @@ wsl wget --mirror --convert-links --adjust-extension \
   --wait=2 --random-wait --limit-rate=1M \
   --user-agent="Mozilla/5.0 (compatible; QED-Tracker/0.2)" \
   -P /mnt/e/qed/QED-Tracker/dataset/official_docs/pytorch \
-  https://pytorch.org/docs/stable/
+  https://docs.pytorch.org/docs/2.12/
 ```
 
 ### 方式三：在代码中调用
